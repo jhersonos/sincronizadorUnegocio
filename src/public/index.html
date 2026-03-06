@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Sincronizador HubDB - uNegocio</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-main">
+                <div>
+                    <h1>Sincronizador HubDB</h1>
+                    <p class="subtitle">Conecta tu base de datos con HubDB de forma segura</p>
+                </div>
+                <div class="header-badge">uNegocio · HubDB Sync</div>
+            </div>
+        </header>
+
+        <!-- Navegación principal -->
+        <nav class="main-tabs">
+            <button class="tab-button tab-active" data-view="mapping">BD → HubDB</button>
+            <button class="tab-button" data-view="reverse">HubDB → BD</button>
+        </nav>
+
+        <!-- Vista 1: Mapeo y sincronización BD → HubDB -->
+        <div class="dashboard-content" id="view-mapping" data-view="mapping">
+            <!-- Panel de información -->
+            <div class="info-panel">
+                <div class="info-card">
+                    <h3>Información de la Tabla</h3>
+                    <div id="table-info" class="table-info">
+                        <p class="loading">Cargando información...</p>
+                    </div>
+                </div>
+                
+                <!-- Vista previa de resultados -->
+                <div class="info-card preview-card" id="preview-card" style="display: none;">
+                    <div class="preview-header">
+                        <h3>Vista Previa de Datos</h3>
+                        <span class="preview-count" id="preview-count"></span>
+                    </div>
+                    <div id="preview-container" class="preview-container">
+                        <p class="preview-empty">Selecciona campos para ver la vista previa</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel de mapeo de campos -->
+            <div class="selectors-panel">
+                <div class="panel-header">
+                    <h2>Asigna campos a columnas de la tabla HubDB</h2>
+                    <button id="refresh-btn" class="btn-refresh" title="Actualizar campos">
+                        Actualizar
+                    </button>
+                </div>
+                
+                <p class="panel-description">
+                    Selecciona la columna a la que se debería importar cada campo. Si un campo no está asignado, no se importará.
+                </p>
+                
+                <div class="mapping-table-container">
+                    <table class="mapping-table">
+                        <thead>
+                            <tr>
+                                <th class="col-checkbox">
+                                    <input type="checkbox" id="select-all" title="Seleccionar todos">
+                                </th>
+                                <th class="col-hubdb">Columna HubDB</th>
+                                <th class="col-database">Campo de Base de Datos</th>
+                            </tr>
+                        </thead>
+                        <tbody id="selectors-container">
+                            <tr>
+                                <td colspan="3">
+                                    <div class="loading-state">
+                                        <div class="spinner"></div>
+                                        <p>Cargando campos de HubDB...</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Acciones de sincronización -->
+                <div class="sync-actions">
+                    <button id="sync-show-btn" class="btn-primary">
+                        Sincronizar
+                    </button>
+                    <button id="sync-start-btn" class="btn-primary btn-secondary" disabled>
+                        Iniciar sincronización
+                    </button>
+                </div>
+
+                <!-- Tabla de sincronización de registros -->
+                <div class="info-card preview-card" id="sync-card" style="display: none;">
+                    <div class="preview-header">
+                        <h3>Registros a sincronizar</h3>
+                        <span class="preview-count" id="sync-count"></span>
+                    </div>
+                    <div id="sync-table-container" class="preview-container">
+                        <p class="preview-empty">Haz clic en "Sincronizar" para ver los registros.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel para Sprint 2 (preparado para futuro) -->
+            <div class="database-panel" id="database-panel" style="display: none;">
+                <div class="panel-header">
+                    <h2>🗄️ Campos de Base de Datos</h2>
+                </div>
+                <div id="database-fields-container" class="selectors-container">
+                    <!-- Se llenará en el Sprint 2 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Vista 2: Sincronización HubDB → BD (placeholder inicial) -->
+        <div class="dashboard-content dashboard-content-hidden" id="view-reverse" data-view="reverse">
+            <div class="info-panel">
+                <div class="info-card info-card-alt">
+                    <h3>Sincronización desde HubDB hacia BD</h3>
+                    <p class="panel-description">
+                        Esta vista permitirá traer cambios realizados directamente en HubDB
+                        hacia tu base de datos. Aquí podrás seleccionar qué columnas confiar
+                        de HubDB para sobreescribir en tu BD.
+                    </p>
+                    <p class="panel-description">
+                        Primero dejemos perfecto el flujo BD → HubDB. Luego conectaremos aquí
+                        los mismos mapeos pero a la inversa.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mensajes de error/success -->
+        <div id="message-container" class="message-container"></div>
+    </div>
+
+    <script type="module" src="js/dashboard.js"></script>
+</body>
+</html>
+

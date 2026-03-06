@@ -1,0 +1,28 @@
+{
+  "name": "sincronizador-unegocio",
+  "version": "1.0.0",
+  "description": "Dashboard para sincronización de datos entre base de datos y HubDB",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "check-env": "node check-env.js",
+    "debug-env": "node debug-env.js"
+  },
+  "keywords": [
+    "hubdb",
+    "dashboard",
+    "sincronizador"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "dotenv": "^16.3.1",
+    "axios": "^1.6.2",
+    "cors": "^2.8.5",
+    "mysql2": "^3.6.5"
+  }
+}
+

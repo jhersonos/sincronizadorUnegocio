@@ -10,28 +10,19 @@ import { printEnvStatus } from './src/utils/envChecker.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Configurar dotenv - buscar .env en la raíz del proyecto
+// Configurar dotenv: cargar .env si existe (desarrollo local). En Railway/Heroku las variables vienen por process.env.
 const envPath = path.join(__dirname, '.env');
 
-// Verificar si el archivo .env existe
-if (!existsSync(envPath)) {
-  console.error('\n❌ ERROR: No se encontró el archivo .env');
-  console.error(`   Buscado en: ${envPath}`);
-  console.error('   💡 Crea un archivo .env en la raíz del proyecto');
-  console.error('   💡 Puedes copiar env.example como referencia: cp env.example .env\n');
-  process.exit(1);
+if (existsSync(envPath)) {
+  const result = dotenv.config({ path: envPath });
+  if (result.error) {
+    console.error('\n❌ ERROR al cargar el archivo .env:', result.error.message);
+    process.exit(1);
+  }
+  console.log('✅ Archivo .env encontrado y cargado');
+} else {
+  console.log('ℹ️  No hay archivo .env; usando variables de entorno del sistema (ej. Railway, Heroku).');
 }
-
-// Cargar variables de entorno
-const result = dotenv.config({ path: envPath });
-
-if (result.error) {
-  console.error('\n❌ ERROR al cargar el archivo .env:');
-  console.error(`   ${result.error.message}\n`);
-  process.exit(1);
-}
-
-console.log('✅ Archivo .env encontrado y cargado');
 
 // Mostrar estado de las variables de entorno
 printEnvStatus();

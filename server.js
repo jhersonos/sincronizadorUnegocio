@@ -41,9 +41,20 @@ app.use(express.static(path.join(__dirname, 'src', 'public')));
 // Rutas API
 app.use('/api', apiRoutes);
 
+// Health check (para Railway y monitoreo)
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', app: 'sincronizador-unegocio' });
+});
+
 // Ruta principal (dashboard de sincronización)
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'src', 'public', 'index.html'));
+  const indexPath = path.join(__dirname, 'src', 'public', 'index.html');
+  res.sendFile(indexPath, (err) => {
+    if (err) {
+      console.error('Error al enviar index.html:', err.message);
+      res.status(500).send(`Error: no se encontró el dashboard. Ruta buscada: ${indexPath}`);
+    }
+  });
 });
 
 // Vista de solo lectura de programas/diplomados

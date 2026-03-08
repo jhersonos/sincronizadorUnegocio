@@ -567,6 +567,11 @@ export const syncHubDB = async (req, res) => {
       const rutas = generateRutas(codDiploma, titlePath);
       const name = programa || String(codDiploma);
 
+      // Siempre enviar "programa" a HubDB con el valor de la BD (DIPLOMADO), aunque no esté en el mapeo
+      if (programa !== undefined && programa !== null) {
+        valuesToUpdate.programa = String(programa).trim();
+      }
+
       return { valuesToUpdate, titlePath, rutas, name };
     };
 

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Listado de Programas</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  </head>
+  <body class="dark-theme">
+    <div class="container">
+      <header class="header">
+        <div class="header-left">
+          <h1 class="app-title">Programas / Diplomados</h1>
+          <p class="app-subtitle">
+            Vista de solo lectura de los registros de base de datos que usa el sincronizador.
+          </p>
+        </div>
+        <div class="header-right">
+          <a href="/" class="btn btn-secondary">← Volver al sincronizador</a>
+        </div>
+      </header>
+
+      <main class="main-content">
+        <section class="panel">
+          <div class="panel-header panel-header-compact">
+            <div>
+              <h2 class="panel-title card-title-compact">Listado de programas (BD)</h2>
+              <p class="panel-subtitle">
+                Datos obtenidos desde la misma vista SQL que alimenta la sincronización.
+              </p>
+            </div>
+            <div class="panel-actions">
+              <button id="prog-refresh-btn" class="btn btn-outline">Refrescar</button>
+              <span id="prog-count" class="badge badge-muted"></span>
+            </div>
+          </div>
+          <div id="prog-table-container" class="preview-table-container">
+            <div class="loading-state">
+              <div class="spinner"></div>
+              <p>Cargando programas desde la base de datos...</p>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      async function loadProgramas() {
+        const container = document.getElementById('prog-table-container');
+        const countLabel = document.getElementById('prog-count');
+        container.innerHTML =
+          '<div class="loading-state"><div class="spinner"></div><p>Cargando programas desde la base de datos...</p></div>';
+        countLabel.textContent = '';
+        try {
+          const res = await fetch('/api/db/programas');
+          if (!res.ok) {
+            container.innerHTML =
+              '<div class="preview-error">Error al cargar programas desde la API.</div>';
+            return;
+          }
+          const result = await res.json();
+          if (!result.success) {
+            container.innerHTML =
+              '<div class="preview-error">' +
+              (result.error || 'Error al cargar programas.') +
+              '</div>';
+            return;
+          }
+          const rows = result.data || [];
+          countLabel.textContent = rows.length + ' registros';
+          if (!rows.length) {
+            container.innerHTML =
+              '<div class="empty-state"><p>No hay registros de programas.</p></div>';
+            return;
+          }
+
+          // Determinar columnas visibles (evitar campos muy largos tipo HTML)
+          const sample = rows[0];
+          const columns = Object.keys(sample).filter(
+            (key) =>
+              !['descripcion', 'objetivos', 'consideraciones'].includes(key)
+          );
+
+          let thead =
+            '<thead><tr>' +
+            columns.map((c) => `<th>${c}</th>`).join('') +
+            '</tr></thead>';
+
+          const MAX_TEXT = 80;
+          let tbody =
+            '<tbody>' +
+            rows
+              .map((row) => {
+                const tds = columns
+                  .map((col) => {
+                    let val = row[col];
+                    if (val === null || val === undefined) return '<td></td>';
+                    if (typeof val === 'string' && val.length > MAX_TEXT) {
+                      val = val.slice(0, MAX_TEXT) + '…';
+                    }
+                    return '<td>' + val + '</td>';
+                  })
+                  .join('');
+                return '<tr>' + tds + '</tr>';
+              })
+              .join('') +
+            '</tbody>';
+
+          container.innerHTML =
+            '<div class="preview-table-wrapper"><table class="preview-table">' +
+            thead +
+            tbody +
+            '</table></div>';
+        } catch (e) {
+          console.error('Error cargando programas:', e);
+          container.innerHTML =
+            '<div class="preview-error">Error de conexión al cargar programas.</div>';
+        }
+      }
+
+      document.addEventListener('DOMContentLoaded', () => {
+        const btn = document.getElementById('prog-refresh-btn');
+        if (btn) {
+          btn.addEventListener('click', loadProgramas);
+        }
+        loadProgramas();
+      });
+    </script>
+  </body>
+  </html>
+

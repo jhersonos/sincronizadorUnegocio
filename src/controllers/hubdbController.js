@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { hubdbConfig } from '../config/hubdb.js';
+import { getHubDBRowsData } from '../services/hubdbRows.js';
 import mysql from 'mysql2/promise';
 import { databaseConfig } from '../config/database.js';
 import { getBaseProgramaQuery } from './databaseController.js';
@@ -275,6 +276,39 @@ export const getHubDBFields = async (req, res) => {
 };
 
 /**
+ * Obtiene las filas de la tabla HubDB (versión draft)
+ * Para usar en la vista HubDB → BD (cargar datos desde HubDB).
+ */
+export const getHubDBRows = async (req, res) => {
+  try {
+    const rows = await getHubDBRowsData();
+    res.json({
+      success: true,
+      data: rows,
+      count: rows.length,
+    });
+  } catch (error) {
+    if (error.message && error.message.includes('Configuración')) {
+      return res.status(400).json({
+        success: false,
+        error: error.message,
+      });
+    }
+    console.error('Error al obtener filas de HubDB:', error.message);
+    if (error.response) {
+      return res.status(error.response.status).json({
+        success: false,
+        error: error.response.data?.message || 'Error al conectar con HubDB',
+      });
+    }
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Error interno del servidor',
+    });
+  }
+};
+
+/**
  * Obtiene información de la tabla de HubDB
  */
 export const getHubDBTableInfo = async (req, res) => {
@@ -424,8 +458,9 @@ export const syncHubDB = async (req, res) => {
       }
     });
 
-    // 2) Obtener todas las filas de HubDB para poder hacer match por cod_diploma
-    const hubdbUrl = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${hubdbConfig.tableId}/rows`;
+    // 2) Obtener filas de HubDB (draft) para hacer match por cod_diploma.
+    // Usamos /rows/draft para que las filas recién creadas por este sync también se encuentren.
+    const hubdbUrl = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${hubdbConfig.tableId}/rows/draft`;
 
     const hubdbResponse = await axios.get(hubdbUrl, {
       headers: hubdbConfig.getHeaders(),
@@ -450,27 +485,14 @@ export const syncHubDB = async (req, res) => {
       }
     });
 
-    // 3) Para cada cod_diploma, buscar la fila en HubDB por cod_diploma
+    // 3) Para cada cod_diploma: actualizar fila existente en HubDB o crear una nueva si no existe
     let updatedCount = 0;
+    let createdCount = 0;
     let notFoundCount = 0;
     const errors = [];
 
-    for (const codDiploma of codDiplomaList) {
-      const dbRow = dbByCodDiploma[String(codDiploma)];
-
-      if (!dbRow) {
-        notFoundCount += 1;
-        continue;
-      }
-
-      const hubdbRow = hubdbByCodDiploma[String(codDiploma)];
-
-      if (!hubdbRow) {
-        notFoundCount += 1;
-        continue;
-      }
-
-      // Construir el payload de actualización para HubDB
+    // Helper: construye el objeto values (campos mapeados + rutas) para una fila
+    const buildValuesForRow = (dbRow, codDiploma) => {
       const valuesToUpdate = {};
       activeMappings.forEach((m) => {
         const hubdbFieldName = m.hubdbField.name;
@@ -533,52 +555,96 @@ export const syncHubDB = async (req, res) => {
         valuesToUpdate[hubdbFieldName] = rawValue;
       });
 
-      // hs_path y rutas completas se calculan a partir de programa y cod_diploma,
-      // siguiendo la lógica del servicio unegocio-cebra.
+      // hs_path y rutas completas se calculan a partir de programa y cod_diploma
       const programa = dbRow.programa;
       const titlePath = generateTitlePath(programa, codDiploma);
       const rutas = generateRutas(codDiploma, titlePath);
+      const name = programa || String(codDiploma);
 
-      try {
-        // Según la documentación de HubDB v3, las actualizaciones se hacen sobre la versión draft
-        // usando el endpoint /rows/{rowId}/draft
-        const updateUrl = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${hubdbConfig.tableId}/rows/${hubdbRow.id}/draft`;
+      return { valuesToUpdate, titlePath, rutas, name };
+    };
 
-        // Para evitar problemas con campos "required" en el esquema de la API,
-        // enviamos también los metadatos básicos actuales de la fila.
-        // Además, actualizamos hs_path (path) y las rutas de página.
-        const payload = {
-          childTableId: hubdbRow.childTableId,
-          displayIndex: hubdbRow.displayIndex,
-          name: hubdbRow.name,
-          path: titlePath || hubdbRow.path,
-          values: {
-            ...valuesToUpdate,
-            ...rutas,
-          },
-        };
+    for (const codDiploma of codDiplomaList) {
+      const dbRow = dbByCodDiploma[String(codDiploma)];
 
-        await axios.patch(updateUrl, payload, {
-          headers: hubdbConfig.getHeaders(),
-        });
+      if (!dbRow) {
+        notFoundCount += 1;
+        continue;
+      }
 
-        updatedCount += 1;
-      } catch (err) {
-        // Log detallado del error de HubSpot
-        console.error(
-          `Error al actualizar fila HubDB para cod_diploma=${codDiploma}:`,
-          err.message
-        );
+      const hubdbRow = hubdbByCodDiploma[String(codDiploma)];
+      const { valuesToUpdate, titlePath, rutas, name } = buildValuesForRow(dbRow, codDiploma);
+
+      const reportError = (err, action) => {
+        console.error(`Error al ${action} fila HubDB para cod_diploma=${codDiploma}:`, err.message);
         if (err.response) {
           console.error('Estado HubSpot:', err.response.status);
           console.error('Respuesta HubSpot:', JSON.stringify(err.response.data, null, 2));
         }
-
         errors.push({
           codDiploma,
           message: err.message,
           status: err.response?.status,
           hubspot: err.response?.data,
+        });
+      };
+
+      if (hubdbRow) {
+        // Actualizar fila existente (PATCH). name (hs_name) = mismo valor que programa.
+        try {
+          const updateUrl = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${hubdbConfig.tableId}/rows/${hubdbRow.id}/draft`;
+          const payload = {
+            childTableId: hubdbRow.childTableId,
+            displayIndex: hubdbRow.displayIndex,
+            name: name,
+            path: titlePath || hubdbRow.path,
+            values: { ...valuesToUpdate, ...rutas },
+          };
+          await axios.patch(updateUrl, payload, { headers: hubdbConfig.getHeaders() });
+          updatedCount += 1;
+        } catch (err) {
+          reportError(err, 'actualizar');
+        }
+      } else {
+        // Crear nueva fila en HubDB (POST) — no existía para este cod_diploma
+        try {
+          const createUrl = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${hubdbConfig.tableId}/rows`;
+          const payload = {
+            path: titlePath || String(codDiploma).replace(/\./g, '-'),
+            name,
+            childTableId: 0,
+            displayIndex: 0,
+            values: {
+              cod_diploma: codDiploma,
+              ...valuesToUpdate,
+              ...rutas,
+            },
+          };
+          await axios.post(createUrl, payload, { headers: hubdbConfig.getHeaders() });
+          createdCount += 1;
+        } catch (err) {
+          reportError(err, 'crear');
+        }
+      }
+    }
+
+    // Publicar la tabla (draft → live) para que los cambios y filas nuevas queden visibles
+    let published = false;
+    if (updatedCount > 0 || createdCount > 0) {
+      try {
+        const publishUrl = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${hubdbConfig.tableId}/draft/publish`;
+        await axios.post(publishUrl, {}, { headers: hubdbConfig.getHeaders() });
+        published = true;
+      } catch (publishErr) {
+        console.error('Error al publicar tabla HubDB (draft → live):', publishErr.message);
+        if (publishErr.response) {
+          console.error('Estado:', publishErr.response.status, JSON.stringify(publishErr.response.data, null, 2));
+        }
+        errors.push({
+          codDiploma: null,
+          message: `Publicación de tabla: ${publishErr.message}`,
+          status: publishErr.response?.status,
+          hubspot: publishErr.response?.data,
         });
       }
     }
@@ -586,7 +652,9 @@ export const syncHubDB = async (req, res) => {
     return res.json({
       success: true,
       updatedCount,
+      createdCount,
       notFoundCount,
+      published,
       errors,
       totalRequested: codDiplomaList.length,
     });

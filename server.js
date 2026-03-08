@@ -39,10 +39,10 @@ printEnvStatus();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middlewares
+// Middlewares (límite body razonable para APIs; sync HubDB→BD obtiene filas en servidor)
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
 // Servir archivos estáticos
 app.use(express.static(path.join(__dirname, 'src', 'public')));
@@ -50,9 +50,14 @@ app.use(express.static(path.join(__dirname, 'src', 'public')));
 // Rutas API
 app.use('/api', apiRoutes);
 
-// Ruta principal
+// Ruta principal (dashboard de sincronización)
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'src', 'public', 'index.html'));
+});
+
+// Vista de solo lectura de programas/diplomados
+app.get('/programa', (req, res) => {
+  res.sendFile(path.join(__dirname, 'src', 'public', 'programa.html'));
 });
 
 // Iniciar servidor

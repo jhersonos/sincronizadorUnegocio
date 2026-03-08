@@ -1,6 +1,7 @@
 import express from 'express';
-import { getHubDBFields, getHubDBTableInfo, syncHubDB } from '../controllers/hubdbController.js';
-import { getDatabaseFields, getPreviewData, getSyncData } from '../controllers/databaseController.js';
+import { getHubDBFields, getHubDBTableInfo, getHubDBRows, syncHubDB } from '../controllers/hubdbController.js';
+import { getDatabaseFields, getPreviewData, getSyncData, syncFromHubDB } from '../controllers/databaseController.js';
+import { listProgramas } from '../controllers/programaController.js';
 
 const router = express.Router();
 
@@ -10,8 +11,14 @@ router.get('/hubdb/fields', getHubDBFields);
 // Ruta para obtener información de la tabla de HubDB
 router.get('/hubdb/table-info', getHubDBTableInfo);
 
+// Ruta para obtener filas de HubDB (draft) — vista HubDB → BD
+router.get('/hubdb/rows', getHubDBRows);
+
 // Ruta para obtener los campos de la base de datos MySQL
 router.get('/db/fields', getDatabaseFields);
+
+// Ruta para listar programas/diplomados (vista /programa)
+router.get('/db/programas', listProgramas);
 
 // Ruta para obtener vista previa de datos basada en mapeos
 router.post('/db/preview', getPreviewData);
@@ -21,6 +28,9 @@ router.post('/db/sync-data', getSyncData);
 
 // Ruta para iniciar la sincronización con HubDB
 router.post('/hubdb/sync', syncHubDB);
+
+// Ruta para sincronizar desde HubDB hacia la BD
+router.post('/db/sync-from-hubdb', syncFromHubDB);
 
 export default router;
 

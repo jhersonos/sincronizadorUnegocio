@@ -615,7 +615,21 @@ body.theme-light {
 .preview-table-container {
     overflow-x: auto;
 }
+.dark-theme div#prog-table-container * {
+    color: #000;
+}
 
+.dark-theme h2.panel-title.card-title-compact {
+    color: #000;
+}
+
+.dark-theme p.panel-subtitle {
+    color: #000;
+}
+
+.dark-theme main.main-content {
+    margin-top: 30px;
+}
 .preview-table {
     width: 100%;
     border-collapse: collapse;

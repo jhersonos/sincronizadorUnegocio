@@ -477,6 +477,20 @@ class HubDBDashboard {
         container.innerHTML = html;
         const selectAll = document.getElementById('reverse-sync-select-all');
         const checkboxes = container.querySelectorAll('.reverse-sync-row-checkbox');
+
+        // Buscador de registros en la tabla HubDB → BD
+        const searchInput = document.getElementById('reverse-sync-search');
+        if (searchInput) {
+            searchInput.addEventListener('input', () => {
+                const q = (searchInput.value || '').toLowerCase().trim();
+                const rowsEls = container.querySelectorAll('.reverse-sync-row');
+                rowsEls.forEach((row) => {
+                    const text = (row.textContent || '').toLowerCase();
+                    row.style.display = !q || text.includes(q) ? '' : 'none';
+                });
+            });
+        }
+
         if (selectAll) {
             selectAll.addEventListener('change', (e) => checkboxes.forEach(cb => { cb.checked = e.target.checked; }));
         }

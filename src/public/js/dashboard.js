@@ -863,7 +863,7 @@ class HubDBDashboard {
             // claves y campos básicos del programa
             'id_diploma': 'ID_DIPLOMA',
             'cod_diploma': 'cod_diploma',
-            'programa': 'DIPLOMADO',
+            'programa': 'programa',
             'fecha_inicio': 'fecha_inicio',
             'fecha_termino': 'fecha_termino',
             'valor_diplomado': 'valor_diplomado',

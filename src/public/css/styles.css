@@ -434,7 +434,10 @@ body.theme-light {
     font-weight: 700;
     display: none;
 }
-
+input#sync-search {
+    margin: 15px 0 20px;
+    width: 100%;
+}
 .mapping-row.has-assignment .assign-check {
     display: inline;
 }

@@ -450,7 +450,25 @@ class HubDBDashboard {
             html += `<tr class="sync-row reverse-sync-row" data-index="${index}" data-cod-diploma="${codDiploma}"><td><input type="checkbox" class="sync-row-checkbox reverse-sync-row-checkbox" checked></td>`;
             columns.forEach(col => {
                 const v = row[col.hubdbName];
-                const display = v == null ? '<em class="null-value">NULL</em>' : String(v).length > 80 ? String(v).slice(0, 80) + '...' : String(v);
+                let display;
+                if (v == null) {
+                    display = '<em class="null-value">NULL</em>';
+                } else if (Array.isArray(v)) {
+                    const labels = v.map((item) => {
+                        if (item && typeof item === 'object') {
+                            return item.name || item.label || JSON.stringify(item);
+                        }
+                        return String(item);
+                    }).filter(Boolean);
+                    const text = labels.join(', ');
+                    display = text.length > 80 ? text.slice(0, 80) + '...' : text;
+                } else if (typeof v === 'object') {
+                    const text = v.name || v.label || JSON.stringify(v);
+                    display = text.length > 80 ? text.slice(0, 80) + '...' : text;
+                } else {
+                    const text = String(v);
+                    display = text.length > 80 ? text.slice(0, 80) + '...' : text;
+                }
                 html += `<td>${display}</td>`;
             });
             html += '</tr>';

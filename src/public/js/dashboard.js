@@ -1128,6 +1128,19 @@ class HubDBDashboard {
         const selectAll = document.getElementById('sync-select-all');
         const rowCheckboxes = container.querySelectorAll('.sync-row-checkbox');
 
+        // Buscador de registros en la tabla de sincronización
+        const searchInput = document.getElementById('sync-search');
+        if (searchInput) {
+            searchInput.addEventListener('input', () => {
+                const q = (searchInput.value || '').toLowerCase().trim();
+                const rowsEls = container.querySelectorAll('.sync-row');
+                rowsEls.forEach((row) => {
+                    const text = (row.textContent || '').toLowerCase();
+                    row.style.display = !q || text.includes(q) ? '' : 'none';
+                });
+            });
+        }
+
         if (selectAll) {
             selectAll.addEventListener('change', (e) => {
                 rowCheckboxes.forEach(cb => {

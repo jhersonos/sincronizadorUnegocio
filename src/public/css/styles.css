@@ -442,6 +442,64 @@ input#sync-search {
     margin: 15px 0 20px;
     width: 100%;
 }
+
+/* Configuración */
+.config-card {
+    background: var(--card-bg);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    padding: 16px 18px;
+    border-left: 3px solid var(--accent-color);
+    margin-bottom: 12px;
+}
+
+.config-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+}
+
+.config-label {
+    font-size: 0.9em;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.config-input-group {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.config-input {
+    flex: 1 1 220px;
+    min-width: 0;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(15, 23, 42, 0.15);
+    background: rgba(255, 255, 255, 0.95);
+    color: var(--text-primary);
+    font-size: 0.9em;
+}
+
+.config-input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 1px rgba(13, 11, 112, 0.15);
+}
+
+.config-helper {
+    margin-top: 10px;
+    font-size: 0.8em;
+    color: var(--text-secondary);
+}
+
+.config-status {
+    margin-top: 6px;
+    font-size: 0.8em;
+    color: var(--text-secondary);
+}
 .mapping-row.has-assignment .assign-check {
     display: inline;
 }

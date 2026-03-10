@@ -302,6 +302,101 @@ export const getSyncData = async (req, res) => {
   }
 };
 
+/**
+ * Lee la configuración de sincronización (por ahora, solo el ID de tabla HubDB).
+ * Fuente principal: tabla sync_config (si existe y tiene filas).
+ * Fallback: variable de entorno HUBDB_TABLE_ID.
+ */
+export const getSyncConfig = async (req, res) => {
+  try {
+    try {
+      databaseConfig.validate();
+    } catch (validationError) {
+      return res.status(400).json({
+        success: false,
+        error: validationError.message,
+      });
+    }
+
+    const pool = getPool();
+    let hubdbTableId = null;
+    let source = 'env';
+
+    try {
+      const [rows] = await pool.query(
+        'SELECT hubdb_table_id FROM sync_config ORDER BY id DESC LIMIT 1'
+      );
+      if (rows && rows.length > 0 && rows[0].hubdb_table_id) {
+        hubdbTableId = rows[0].hubdb_table_id;
+        source = 'db';
+      }
+    } catch (e) {
+      // Si la tabla no existe, simplemente caemos al valor de entorno
+    }
+
+    if (!hubdbTableId && process.env.HUBDB_TABLE_ID) {
+      hubdbTableId = process.env.HUBDB_TABLE_ID;
+      source = 'env';
+    }
+
+    return res.json({
+      success: true,
+      hubdbTableId: hubdbTableId || null,
+      source,
+    });
+  } catch (error) {
+    console.error('Error al leer configuración de sincronización:', error.message);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Error interno al leer la configuración',
+    });
+  }
+};
+
+/**
+ * Actualiza la configuración de sincronización (ID de tabla HubDB).
+ * Requiere tabla sync_config (id AUTO_INCREMENT, hubdb_table_id VARCHAR).
+ */
+export const updateSyncConfig = async (req, res) => {
+  try {
+    try {
+      databaseConfig.validate();
+    } catch (validationError) {
+      return res.status(400).json({
+        success: false,
+        error: validationError.message,
+      });
+    }
+
+    const { hubdbTableId } = req.body || {};
+    if (!hubdbTableId || typeof hubdbTableId !== 'string' || !hubdbTableId.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'hubdbTableId es obligatorio',
+      });
+    }
+
+    const pool = getPool();
+    const trimmed = hubdbTableId.trim();
+
+    await pool.query(
+      'INSERT INTO sync_config (hubdb_table_id) VALUES (?)',
+      [trimmed]
+    );
+
+    return res.json({
+      success: true,
+      hubdbTableId: trimmed,
+    });
+  } catch (error) {
+    console.error('Error al actualizar configuración de sincronización:', error.message);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Error interno al guardar la configuración',
+    });
+  }
+};
+
 // Mapeo: nombre lógico de columna (vista programa) → { table, column } para UPDATE HubDB → BD
 // "name" / "hs_name" de HubDB no existe en MySQL; se escribe en DIPLOMADO (programa).
 const DB_FIELD_TO_TABLE_COLUMN = {

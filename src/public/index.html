@@ -61,6 +61,33 @@
             </div>
         </section>
 
+        <!-- Configuración de sincronizador -->
+        <section class="info-section">
+            <h2 class="info-section-title">Configuración</h2>
+            <div class="config-card">
+                <div class="config-row">
+                    <label for="config-hubdb-table-id" class="config-label">ID de tabla HubDB</label>
+                    <div class="config-input-group">
+                        <input
+                            type="text"
+                            id="config-hubdb-table-id"
+                            class="config-input"
+                            placeholder="Ej: 1234567"
+                            autocomplete="off"
+                        >
+                        <button id="config-save-btn" class="btn-primary btn-compact" type="button">
+                            Guardar
+                        </button>
+                    </div>
+                </div>
+                <p class="config-helper">
+                    Este ID se utiliza para todas las operaciones de sincronización con HubDB. Si no se configura,
+                    se intentará usar el valor de la variable de entorno <code>HUBDB_TABLE_ID</code>.
+                </p>
+                <p class="config-status" id="config-status-text">Cargando configuración...</p>
+            </div>
+        </section>
+
         <!-- Tabs (ocultos visualmente pero usados para contenido) -->
         <nav class="main-tabs" aria-hidden="true" style="display: none;">
             <button class="tab-button tab-active" data-view="mapping">BD → HubDB</button>

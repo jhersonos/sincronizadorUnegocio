@@ -15,6 +15,28 @@ const getPool = () => {
   return pool;
 };
 
+// Lee el ID efectivo de tabla HubDB desde BD (tabla sync_config) o, si no existe, desde la config/env.
+const getEffectiveHubdbTableId = async () => {
+  const fallback = hubdbConfig.tableId;
+  try {
+    databaseConfig.validate();
+  } catch {
+    return fallback;
+  }
+  try {
+    const p = getPool();
+    const [rows] = await p.query(
+      'SELECT hubdb_table_id FROM sync_config ORDER BY id DESC LIMIT 1'
+    );
+    if (rows && rows.length > 0 && rows[0].hubdb_table_id) {
+      return rows[0].hubdb_table_id;
+    }
+  } catch (e) {
+    // Si la tabla no existe o hay error, usar fallback
+  }
+  return fallback;
+};
+
 // Helpers para construir hs_path y rutas, replicando la lógica de unegocio-cebra
 const generateTitlePath = (programa, codDiploma) => {
   // Solo queremos usar el título (programa) como hs_path,
@@ -225,7 +247,8 @@ export const getHubDBFields = async (req, res) => {
       });
     }
     
-    const url = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${hubdbConfig.tableId}`;
+    const tableId = await getEffectiveHubdbTableId();
+    const url = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${tableId}`;
     
     console.log(`🔗 Consultando HubDB: ${url}`);
     
@@ -324,7 +347,8 @@ export const getHubDBTableInfo = async (req, res) => {
       });
     }
     
-    const url = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${hubdbConfig.tableId}`;
+    const tableId = await getEffectiveHubdbTableId();
+    const url = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${tableId}`;
     
     const response = await axios.get(url, {
       headers: hubdbConfig.getHeaders()
@@ -460,7 +484,8 @@ export const syncHubDB = async (req, res) => {
 
     // 2) Obtener filas de HubDB (draft) para hacer match por cod_diploma.
     // Usamos /rows/draft para que las filas recién creadas por este sync también se encuentren.
-    const hubdbUrl = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${hubdbConfig.tableId}/rows/draft`;
+    const effectiveTableId = await getEffectiveHubdbTableId();
+    const hubdbUrl = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${effectiveTableId}/rows/draft`;
 
     const hubdbResponse = await axios.get(hubdbUrl, {
       headers: hubdbConfig.getHeaders(),

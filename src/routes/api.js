@@ -1,6 +1,6 @@
 import express from 'express';
 import { getHubDBFields, getHubDBTableInfo, getHubDBRows, syncHubDB } from '../controllers/hubdbController.js';
-import { getDatabaseFields, getPreviewData, getSyncData, syncFromHubDB } from '../controllers/databaseController.js';
+import { getDatabaseFields, getPreviewData, getSyncData, syncFromHubDB, getSyncConfig, updateSyncConfig } from '../controllers/databaseController.js';
 import { listProgramas } from '../controllers/programaController.js';
 
 const router = express.Router();
@@ -25,6 +25,10 @@ router.post('/db/preview', getPreviewData);
 
 // Ruta para obtener todos los registros necesarios para sincronización
 router.post('/db/sync-data', getSyncData);
+
+// Configuración de sincronización (ID tabla HubDB)
+router.get('/config', getSyncConfig);
+router.post('/config', updateSyncConfig);
 
 // Ruta para iniciar la sincronización con HubDB
 router.post('/hubdb/sync', syncHubDB);

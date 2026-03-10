@@ -20,6 +20,7 @@ class HubDBDashboard {
      */
     async init() {
         this.setupEventListeners();
+        await this.loadSyncConfig();
         await this.loadTableInfo();
         await this.loadFields();
     }
@@ -130,6 +131,71 @@ class HubDBDashboard {
         const reverseSyncStartBtn = document.getElementById('reverse-sync-start-btn');
         if (reverseSyncStartBtn) {
             reverseSyncStartBtn.addEventListener('click', () => this.startReverseSynchronization());
+        }
+
+        // Guardar configuración (ID tabla HubDB)
+        const configSaveBtn = document.getElementById('config-save-btn');
+        if (configSaveBtn) {
+            configSaveBtn.addEventListener('click', () => this.saveSyncConfig());
+        }
+
+        const configInput = document.getElementById('config-hubdb-table-id');
+        if (configInput) {
+            configInput.addEventListener('keyup', (e) => {
+                if (e.key === 'Enter') {
+                    this.saveSyncConfig();
+                }
+            });
+        }
+    }
+
+    async loadSyncConfig() {
+        const input = document.getElementById('config-hubdb-table-id');
+        const statusEl = document.getElementById('config-status-text');
+        if (!input || !statusEl) return;
+        try {
+            const res = await fetch(`${this.apiBaseUrl}/config`);
+            const result = await res.json();
+            if (result.success) {
+                if (result.hubdbTableId) {
+                    input.value = result.hubdbTableId;
+                }
+                const source = result.source === 'db' ? 'base de datos' : 'variable de entorno';
+                statusEl.textContent = `Tabla HubDB actual: ${result.hubdbTableId || 'no configurada'} (origen: ${source}).`;
+            } else {
+                statusEl.textContent = result.error || 'No se pudo cargar la configuración.';
+            }
+        } catch (e) {
+            console.error('Error al cargar configuración:', e);
+            statusEl.textContent = 'Error al cargar la configuración.';
+        }
+    }
+
+    async saveSyncConfig() {
+        const input = document.getElementById('config-hubdb-table-id');
+        const statusEl = document.getElementById('config-status-text');
+        if (!input || !statusEl) return;
+        const value = (input.value || '').trim();
+        if (!value) {
+            this.showMessage('⚠️ Debes ingresar un ID de tabla HubDB.', 'warning');
+            return;
+        }
+        try {
+            const res = await fetch(`${this.apiBaseUrl}/config`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ hubdbTableId: value }),
+            });
+            const result = await res.json();
+            if (result.success) {
+                this.showMessage('✅ Configuración guardada correctamente.', 'success');
+                statusEl.textContent = `Tabla HubDB actual: ${result.hubdbTableId} (origen: base de datos).`;
+            } else {
+                this.showMessage(`❌ Error al guardar configuración: ${result.error || 'Error desconocido'}`, 'error');
+            }
+        } catch (e) {
+            console.error('Error al guardar configuración:', e);
+            this.showMessage('❌ Error de conexión al guardar la configuración.', 'error');
         }
     }
 

@@ -62,6 +62,11 @@ app.get('/programa', (req, res) => {
   res.sendFile(path.join(__dirname, 'src', 'public', 'programa.html'));
 });
 
+// Vista de sincronización de directores/académicos
+app.get('/director', (req, res) => {
+  res.sendFile(path.join(__dirname, 'src', 'public', 'director.html'));
+});
+
 // Iniciar servidor
 app.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);

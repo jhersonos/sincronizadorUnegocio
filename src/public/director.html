@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sincronizador Directores - uNegocio</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="theme-light">
+    <div class="container">
+        <header class="header">
+            <div class="header-left">
+                <div class="header-logo" aria-hidden="true"></div>
+                <div>
+                    <h1 class="header-title">Sincronizador Directores</h1>
+                    <p class="header-subtitle">Sincroniza datos de directores/académicos con HubDB</p>
+                </div>
+            </div>
+            <nav class="header-nav">
+                <a href="/" class="header-link">HubDB Sync</a>
+                <a href="/programa" class="header-link">Programas</a>
+                <a href="/director" class="header-link header-link-active">Directores</a>
+            </nav>
+        </header>
+
+        <!-- Información de la Tabla de Directores (2x2) -->
+        <section class="info-section">
+            <h2 class="info-section-title">Información de la Tabla</h2>
+            <div class="info-grid" id="director-table-info">
+                <div class="info-grid-item">
+                    <span class="info-grid-label">Nombre</span>
+                    <span class="info-grid-value" id="director-table-info-name">—</span>
+                </div>
+                <div class="info-grid-item">
+                    <span class="info-grid-label">Etiqueta</span>
+                    <span class="info-grid-value" id="director-table-info-label">—</span>
+                </div>
+                <div class="info-grid-item">
+                    <span class="info-grid-label"># ID de Tabla</span>
+                    <span class="info-grid-value" id="director-table-info-id">—</span>
+                </div>
+                <div class="info-grid-item">
+                    <span class="info-grid-label">Cantidad de Campos</span>
+                    <span class="info-grid-value" id="director-table-info-fields">—</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Mapeo de campos: HubDB → BD -->
+        <div class="dashboard-content" id="view-director">
+            <div class="selectors-panel selectors-panel-compact">
+                <div id="director-mapping-section" class="mapping-section">
+                    <div class="mapping-header">
+                        <div class="mapping-header-top">
+                            <h2 class="mapping-title">Mapeo: BD - columnas HubDB (Directores)</h2>
+                            <div class="mapping-actions">
+                                <input type="search" id="director-search-fields" class="search-input" placeholder="Buscar campos..." aria-label="Buscar campos de directores">
+                                <button id="director-refresh-btn" class="btn-update" title="Actualizar campos">
+                                    <span class="btn-update-icon" aria-hidden="true">↻</span>
+                                    Actualizar
+                                </button>
+                            </div>
+                        </div>
+                        <p class="mapping-description">
+                            Asigna cada columna HubDB de la tabla de directores/académicos a un campo de tu BD. 
+                            <strong>cod_diploma es obligatorio</strong> para sincronizar. 
+                            Cuando definas la tabla de BD, los campos aparecerán en los selectores.
+                        </p>
+                        <p class="mapping-status" id="director-mapping-status">0 de 0 campos asignados</p>
+                    </div>
+                    <div class="mapping-table-container mapping-table-container-compact">
+                        <table class="mapping-table">
+                            <thead>
+                                <tr>
+                                    <th class="col-checkbox">
+                                        <input type="checkbox" id="director-select-all" title="Seleccionar todos">
+                                    </th>
+                                    <th class="col-hubdb">Columna HubDB</th>
+                                    <th class="col-tipo">Tipo</th>
+                                    <th class="col-database">Campo de Base de Datos</th>
+                                </tr>
+                            </thead>
+                            <tbody id="director-selectors-container">
+                                <tr>
+                                    <td colspan="4">
+                                        <div class="loading-state">
+                                            <div class="spinner"></div>
+                                            <p>Cargando campos de HubDB...</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="sync-actions sync-actions-compact sync-actions-mapping">
+                        <button id="director-sync-show-btn" class="btn-primary btn-compact" disabled>Sincronizar</button>
+                    </div>
+                    <p class="mapping-description" style="margin-top: 16px; font-size: 0.85em; color: var(--text-secondary);">
+                        Nota: La sincronización de directores se habilitará cuando definas la tabla de BD correspondiente (p.ej. academicos, usuarios_int, etc.).
+                    </p>
+                </div>
+
+                <div id="director-sync-view-section" class="sync-view-section" style="display: none;">
+                    <div class="sync-actions sync-actions-compact sync-actions-sync">
+                        <button id="director-sync-back-btn" class="btn-back btn-compact" type="button" title="Volver al mapeo">← Retroceder</button>
+                        <button id="director-sync-start-btn" class="btn-primary btn-secondary btn-compact" disabled>Iniciar sincronización</button>
+                    </div>
+                    <div class="info-card preview-card info-card-compact" id="director-sync-card">
+                        <div class="preview-header preview-header-compact">
+                            <h3 class="card-title-compact">Registros a sincronizar</h3>
+                            <span class="preview-count" id="director-sync-count"></span>
+                        </div>
+                        <div class="mapping-actions mapping-actions-sync">
+                            <input
+                                type="search"
+                                id="director-sync-search"
+                                class="search-input"
+                                placeholder="Buscar directores por código, nombre u otros campos..."
+                                aria-label="Buscar registros a sincronizar"
+                            >
+                        </div>
+                        <div id="director-sync-table-container" class="preview-container preview-container-compact">
+                            <p class="preview-empty">Preparado para futura sincronización.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="message-container" class="message-container"></div>
+    </div>
+
+    <script type="module" src="js/director.js"></script>
+</body>
+</html>

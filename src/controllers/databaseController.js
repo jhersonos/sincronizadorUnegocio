@@ -653,3 +653,37 @@ export const syncFromHubDB = async (req, res) => {
   });
 };
 
+/**
+ * Placeholder: campos de BD para directores/académicos.
+ * Por ahora devuelve vacío hasta que se defina la tabla de BD correspondiente.
+ * Cuando se defina (p.ej. tabla `academicos` o `usuarios_int`), se ajustará para leer DESCRIBE
+ * o construir una query base similar a getBaseProgramaQuery.
+ */
+export const getDirectorDbFields = async (req, res) => {
+  try {
+    try {
+      databaseConfig.validate();
+    } catch (validationError) {
+      return res.status(400).json({
+        success: false,
+        error: validationError.message,
+        hint: 'Revisa las variables MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD y MYSQL_DATABASE en tu .env',
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: [],
+      count: 0,
+      message:
+        'Tabla de BD para directores aún no configurada. Define la tabla de BD y ajusta este endpoint.',
+    });
+  } catch (error) {
+    console.error('Error al obtener campos de BD de directores:', error.message);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Error interno al consultar la base de datos',
+    });
+  }
+};
+

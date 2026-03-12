@@ -19,6 +19,10 @@ export const hubdbConfig = {
     return process.env.HUBDB_TABLE_ID?.trim() || null;
   },
   
+  get directorTableId() {
+    return process.env.HUBDB_DIRECTOR_ID?.trim() || null;
+  },
+  
   baseUrl: 'https://api.hubapi.com',
   
   /**

@@ -37,6 +37,17 @@ const getEffectiveHubdbTableId = async () => {
   return fallback;
 };
 
+// Devuelve el ID de la tabla HubDB de directores/académicos (desde .env).
+const getDirectorTableId = () => {
+  const directorId = hubdbConfig.directorTableId;
+  if (!directorId) {
+    throw new Error(
+      'HUBDB_DIRECTOR_ID no está configurado. Añade esta variable de entorno con el ID de la tabla de directores.'
+    );
+  }
+  return directorId;
+};
+
 // Helpers para construir hs_path y rutas, replicando la lógica de unegocio-cebra
 const generateTitlePath = (programa, codDiploma) => {
   // Solo queremos usar el título (programa) como hs_path,
@@ -628,7 +639,7 @@ export const syncHubDB = async (req, res) => {
       if (hubdbRow) {
         // Actualizar fila existente (PATCH). name (hs_name) = mismo valor que programa.
         try {
-          const updateUrl = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${hubdbConfig.tableId}/rows/${hubdbRow.id}/draft`;
+          const updateUrl = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${effectiveTableId}/rows/${hubdbRow.id}/draft`;
           const payload = {
             childTableId: hubdbRow.childTableId,
             displayIndex: hubdbRow.displayIndex,
@@ -648,7 +659,7 @@ export const syncHubDB = async (req, res) => {
         if (existingByPath) {
           // Actualizar la fila existente que tiene ese path (así no intentamos crear duplicado)
           try {
-            const updateUrl = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${hubdbConfig.tableId}/rows/${existingByPath.id}/draft`;
+            const updateUrl = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${effectiveTableId}/rows/${existingByPath.id}/draft`;
             const payload = {
               childTableId: existingByPath.childTableId ?? 0,
               displayIndex: existingByPath.displayIndex ?? 0,
@@ -668,7 +679,7 @@ export const syncHubDB = async (req, res) => {
         } else {
           // Crear nueva fila en HubDB (POST)
           try {
-            const createUrl = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${hubdbConfig.tableId}/rows`;
+            const createUrl = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${effectiveTableId}/rows`;
             const payload = {
               path: titlePath || String(codDiploma).replace(/\./g, '-'),
               name,
@@ -692,7 +703,7 @@ export const syncHubDB = async (req, res) => {
               try {
                 const rowIdStr = String(rowId);
                 const existingRow = hubdbRows.find((r) => String(r.id) === rowIdStr);
-                const updateUrl = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${hubdbConfig.tableId}/rows/${rowIdStr}/draft`;
+                const updateUrl = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${effectiveTableId}/rows/${rowIdStr}/draft`;
                 const patchPayload = {
                   childTableId: existingRow?.childTableId ?? 0,
                   displayIndex: existingRow?.displayIndex ?? 0,
@@ -721,7 +732,7 @@ export const syncHubDB = async (req, res) => {
     let published = false;
     if (updatedCount > 0 || createdCount > 0) {
       try {
-        const publishUrl = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${hubdbConfig.tableId}/draft/publish`;
+        const publishUrl = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${effectiveTableId}/draft/publish`;
         await axios.post(publishUrl, {}, { headers: hubdbConfig.getHeaders() });
         published = true;
       } catch (publishErr) {
@@ -755,6 +766,154 @@ export const syncHubDB = async (req, res) => {
       error:
         error.message ||
         'Error interno durante la sincronización de datos con HubDB',
+    });
+  }
+};
+
+/**
+ * Controladores específicos para la tabla HubDB de directores/académicos
+ */
+
+export const getHubDBDirectorTableInfo = async (req, res) => {
+  try {
+    const apiToken = hubdbConfig.apiToken;
+    if (!apiToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'HUBSPOT_API_TOKEN no está configurado',
+      });
+    }
+
+    const tableId = getDirectorTableId();
+    const url = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${tableId}`;
+
+    const response = await axios.get(url, {
+      headers: hubdbConfig.getHeaders(),
+    });
+
+    res.json({
+      success: true,
+      data: {
+        id: response.data.id,
+        name: response.data.name,
+        label: response.data.label,
+        columnsCount: response.data.columns?.length || 0,
+      },
+    });
+  } catch (error) {
+    console.error('Error al obtener información de la tabla de directores:', error.message);
+    if (error.response) {
+      res.status(error.response.status).json({
+        success: false,
+        error: error.response.data?.message || 'Error al conectar con HubDB',
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Error interno del servidor',
+      });
+    }
+  }
+};
+
+export const getHubDBDirectorFields = async (req, res) => {
+  try {
+    const apiToken = hubdbConfig.apiToken;
+    if (!apiToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'HUBSPOT_API_TOKEN no está configurado',
+      });
+    }
+
+    const tableId = getDirectorTableId();
+    const url = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${tableId}`;
+
+    console.log(`🔗 Consultando HubDB directores: ${url}`);
+
+    const response = await axios.get(url, {
+      headers: hubdbConfig.getHeaders(),
+    });
+
+    const fields = response.data.columns || [];
+
+    const formattedFields = fields.map((field) => ({
+      id: field.id,
+      name: field.name,
+      label: field.label || field.name,
+      type: field.type,
+      required: field.required || false,
+    }));
+
+    res.json({
+      success: true,
+      data: formattedFields,
+      count: formattedFields.length,
+    });
+  } catch (error) {
+    console.error('Error al obtener campos de la tabla de directores:', error.message);
+    if (error.response) {
+      res.status(error.response.status).json({
+        success: false,
+        error: error.response.data?.message || 'Error al conectar con HubDB',
+        details: error.response.data,
+      });
+    } else if (error.request) {
+      res.status(503).json({
+        success: false,
+        error: 'No se pudo conectar con la API de HubSpot',
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Error interno del servidor',
+      });
+    }
+  }
+};
+
+export const getHubDBDirectorRows = async (req, res) => {
+  try {
+    const apiToken = hubdbConfig.apiToken;
+    if (!apiToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'HUBSPOT_API_TOKEN no está configurado',
+      });
+    }
+
+    const tableId = getDirectorTableId();
+    const url = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${tableId}/rows/draft`;
+
+    const response = await axios.get(url, {
+      headers: hubdbConfig.getHeaders(),
+      params: { limit: 10000 },
+    });
+
+    const results = response.data.results || [];
+    const rows = results.map((row) => ({
+      id: row.id,
+      path: row.path,
+      name: row.name,
+      ...(row.values || {}),
+    }));
+
+    res.json({
+      success: true,
+      data: rows,
+      count: rows.length,
+    });
+  } catch (error) {
+    console.error('Error al obtener filas de la tabla de directores:', error.message);
+    if (error.response) {
+      return res.status(error.response.status).json({
+        success: false,
+        error: error.response.data?.message || 'Error al conectar con HubDB',
+      });
+    }
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Error interno del servidor',
     });
   }
 };

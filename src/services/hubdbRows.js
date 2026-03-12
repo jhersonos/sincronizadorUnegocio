@@ -5,6 +5,38 @@
  */
 import axios from 'axios';
 import { hubdbConfig } from '../config/hubdb.js';
+import mysql from 'mysql2/promise';
+import { databaseConfig } from '../config/database.js';
+
+let pool;
+const getPool = () => {
+  if (!pool) {
+    pool = mysql.createPool(databaseConfig.getConnectionConfig());
+  }
+  return pool;
+};
+
+// Helper: obtiene el ID de tabla efectivo (desde BD o config/env)
+const getEffectiveHubdbTableId = async () => {
+  const fallback = hubdbConfig.tableId;
+  try {
+    databaseConfig.validate();
+  } catch {
+    return fallback;
+  }
+  try {
+    const p = getPool();
+    const [rows] = await p.query(
+      'SELECT hubdb_table_id FROM sync_config ORDER BY id DESC LIMIT 1'
+    );
+    if (rows && rows.length > 0 && rows[0].hubdb_table_id) {
+      return rows[0].hubdb_table_id;
+    }
+  } catch (e) {
+    // Si la tabla no existe o hay error, usar fallback
+  }
+  return fallback;
+};
 
 /**
  * Obtiene todas las filas de la tabla HubDB (versión draft).
@@ -13,7 +45,8 @@ import { hubdbConfig } from '../config/hubdb.js';
  */
 export async function getHubDBRowsData() {
   hubdbConfig.validate();
-  const url = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${hubdbConfig.tableId}/rows/draft`;
+  const effectiveTableId = await getEffectiveHubdbTableId();
+  const url = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${effectiveTableId}/rows/draft`;
   const response = await axios.get(url, {
     headers: hubdbConfig.getHeaders(),
     params: { limit: 10000 },

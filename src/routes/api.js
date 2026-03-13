@@ -1,6 +1,6 @@
 import express from 'express';
-import { getHubDBFields, getHubDBTableInfo, getHubDBRows, syncHubDB, getHubDBDirectorTableInfo, getHubDBDirectorFields, getHubDBDirectorRows } from '../controllers/hubdbController.js';
-import { getDatabaseFields, getPreviewData, getSyncData, syncFromHubDB, getSyncConfig, updateSyncConfig, getDirectorDbFields } from '../controllers/databaseController.js';
+import { getHubDBFields, getHubDBTableInfo, getHubDBRows, syncHubDB, getHubDBDirectorTableInfo, getHubDBDirectorFields, getHubDBDirectorRows, syncDirectorToHubDB } from '../controllers/hubdbController.js';
+import { getDatabaseFields, getPreviewData, getSyncData, syncFromHubDB, getSyncConfig, updateSyncConfig, getDirectorDbFields, getDirectorSyncData } from '../controllers/databaseController.js';
 import { listProgramas } from '../controllers/programaController.js';
 
 const router = express.Router();
@@ -41,8 +41,10 @@ router.get('/hubdb/director/table-info', getHubDBDirectorTableInfo);
 router.get('/hubdb/director/fields', getHubDBDirectorFields);
 router.get('/hubdb/director/rows', getHubDBDirectorRows);
 
-// Ruta para campos de BD de directores (placeholder hasta definir tabla)
+// Rutas para sincronización de directores/académicos
 router.get('/db/director/fields', getDirectorDbFields);
+router.post('/db/director/sync-data', getDirectorSyncData);
+router.post('/hubdb/director/sync', syncDirectorToHubDB);
 
 export default router;
 

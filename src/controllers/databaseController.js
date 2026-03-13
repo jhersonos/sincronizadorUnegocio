@@ -59,6 +59,70 @@ export const getBaseProgramaQuery = () => `
 `;
 
 /**
+ * Query base que replica read_directorAcademico del PHP (Items class):
+ * una fila por diplomado con los datos del director académico (id_DA).
+ * Tablas: diplomados, profesores, phd, mba, master, magister, postitulo, diplomado, titulo_profesional.
+ * Campos mapeables a HubDB data_academico: nombre_academico, resumen_cv, foto, cod_diploma, estudios, cargo, palabras_del_director.
+ *
+ * La URL base de fotos se configura con FOTO_PROFESORES_BASE_URL en .env (default: https://intranet.unegocios.cl/fotos/profesores/)
+ */
+const getFotoProfesoresBaseUrl = () =>
+  (process.env.FOTO_PROFESORES_BASE_URL || 'https://intranet.unegocios.cl/fotos/profesores/').replace(/'/g, "''");
+
+export const getBaseDirectorAcademicoQuery = () => {
+  const fotoBase = getFotoProfesoresBaseUrl();
+  return `
+  SELECT
+    d.cod_diploma,
+    CONCAT_WS(' ', pf.Nombre, pf.ApellidoPaterno, pf.ApellidoMaterno) AS nombre_academico,
+    pf.resumen_cv,
+    CONCAT(
+      IF(ph.NombrePHD <> '' AND ph.NombrePHD IS NOT NULL,
+        CONCAT(CONCAT_WS(', ', COALESCE(ph.NombrePHD, ''), COALESCE(ph.UniversidadPHD, ''), COALESCE(ph.PaisPHD, '')), '<br>'),
+        ''
+      ),
+      IF(mba.NombreMBA <> '' AND mba.NombreMBA IS NOT NULL,
+        CONCAT(CONCAT_WS(', ', COALESCE(mba.NombreMBA, ''), COALESCE(mba.UniversidadMBA, ''), COALESCE(mba.PaisMBA, '')), '<br>'),
+        ''
+      ),
+      IF(ms.NombreMASTER <> '' AND ms.NombreMASTER IS NOT NULL,
+        CONCAT(CONCAT_WS(', ', COALESCE(ms.NombreMASTER, ''), COALESCE(ms.UniversidadMASTER, ''), COALESCE(ms.PaisMASTER, '')), '<br>'),
+        ''
+      ),
+      IF(mg.NombreMAGISTER <> '' AND mg.NombreMAGISTER IS NOT NULL,
+        CONCAT(CONCAT_WS(', ', COALESCE(mg.NombreMAGISTER, ''), COALESCE(mg.UniversidadMAGISTER, ''), COALESCE(mg.PaisMAGISTER, '')), '<br>'),
+        ''
+      ),
+      IF(ps.NombrePOSTTITULO <> '' AND ps.NombrePOSTTITULO IS NOT NULL,
+        CONCAT(CONCAT_WS(', ', COALESCE(ps.NombrePOSTTITULO, ''), COALESCE(ps.UniversidadPOSTTITULO, ''), COALESCE(ps.PaisPOSTTITULO, '')), '<br>'),
+        ''
+      ),
+      IF(dp.NombreDIPLOMADO <> '' AND dp.NombreDIPLOMADO IS NOT NULL,
+        CONCAT(CONCAT_WS(', ', COALESCE(dp.NombreDIPLOMADO, ''), COALESCE(dp.UniversidadDIPLOMADO, ''), COALESCE(dp.PaisDIPLOMADO, '')), '<br>'),
+        ''
+      ),
+      IF(tp.TituloProfesional <> '' AND tp.TituloProfesional IS NOT NULL,
+        CONCAT_WS(', ', COALESCE(tp.TituloProfesional, ''), COALESCE(tp.UniversidadTituloProfesional, ''), COALESCE(tp.PaisTituloProfesional, '')),
+        ''
+      )
+    ) AS estudios,
+    CONCAT('${fotoBase}', pf.ID_PROFESOR, '.jpg') AS foto,
+    '' AS cargo,
+    '' AS palabras_del_director
+  FROM
+    diplomados d
+    INNER JOIN profesores pf ON pf.ID_PROFESOR = d.id_DA
+    LEFT JOIN phd ph ON ph.ID_PROFESOR = pf.ID_PROFESOR
+    LEFT JOIN mba mba ON mba.ID_PROFESOR = pf.ID_PROFESOR
+    LEFT JOIN master ms ON ms.ID_PROFESOR = pf.ID_PROFESOR
+    LEFT JOIN magister mg ON mg.ID_PROFESOR = pf.ID_PROFESOR
+    LEFT JOIN postitulo ps ON ps.ID_PROFESOR = pf.ID_PROFESOR
+    LEFT JOIN diplomado dp ON dp.ID_PROFESOR = pf.ID_PROFESOR
+    LEFT JOIN titulo_profesional tp ON tp.ID_PROFESOR = pf.ID_PROFESOR
+`;
+};
+
+/**
  * Obtiene los campos (columnas) a partir del SELECT completo
  * del programa (equivalente al data_programa.php), exponiendo
  * las columnas disponibles para mapeo a HubDB.
@@ -297,6 +361,85 @@ export const getSyncData = async (req, res) => {
       error:
         error.message ||
         'Error al obtener los datos de la base de datos para sincronización',
+      details: error.code,
+    });
+  }
+};
+
+/**
+ * Obtiene los datos de directores/académicos para sincronización con HubDB data_academico.
+ * Usa getBaseDirectorAcademicoQuery() (replica de read_directorAcademico del PHP).
+ */
+export const getDirectorSyncData = async (req, res) => {
+  try {
+    try {
+      databaseConfig.validate();
+    } catch (validationError) {
+      return res.status(400).json({
+        success: false,
+        error: validationError.message,
+      });
+    }
+
+    const { mappings } = req.body;
+
+    if (!mappings || !Array.isArray(mappings) || mappings.length === 0) {
+      return res.json({
+        success: true,
+        data: [],
+        count: 0,
+        message: 'No hay mapeos seleccionados',
+      });
+    }
+
+    const activeMappings = mappings.filter(
+      (m) => m.enabled && m.hubdbField && m.databaseField
+    );
+
+    if (activeMappings.length === 0) {
+      return res.json({
+        success: true,
+        data: [],
+        count: 0,
+        message: 'No hay mapeos activos',
+      });
+    }
+
+    const pool = getPool();
+
+    const dbColumnsSet = new Set(
+      activeMappings.map((m) => m.databaseField.name)
+    );
+    dbColumnsSet.add('cod_diploma');
+
+    const dbColumns = Array.from(dbColumnsSet).map((col) => `\`${col}\``);
+
+    const query = `
+      SELECT ${dbColumns.join(', ')}
+      FROM (
+        ${getBaseDirectorAcademicoQuery()}
+      ) AS director_academico
+    `;
+
+    console.log('🔍 Consulta de datos de directores para sincronización:', query);
+
+    const [rows] = await pool.query(query);
+
+    return res.json({
+      success: true,
+      data: rows,
+      count: rows.length,
+      totalColumns: dbColumns.length,
+      source: 'director_academico',
+    });
+  } catch (error) {
+    console.error('Error al obtener datos de directores:', error.message);
+
+    return res.status(500).json({
+      success: false,
+      error:
+        error.message ||
+        'Error al obtener los datos de directores de la base de datos',
       details: error.code,
     });
   }
@@ -654,10 +797,9 @@ export const syncFromHubDB = async (req, res) => {
 };
 
 /**
- * Placeholder: campos de BD para directores/académicos.
- * Por ahora devuelve vacío hasta que se defina la tabla de BD correspondiente.
- * Cuando se defina (p.ej. tabla `academicos` o `usuarios_int`), se ajustará para leer DESCRIBE
- * o construir una query base similar a getBaseProgramaQuery.
+ * Obtiene los campos de BD para directores/académicos.
+ * Usa getBaseDirectorAcademicoQuery() que replica read_directorAcademico del PHP.
+ * Tablas: diplomados, profesores, phd, mba, master, magister, postitulo, diplomado, titulo_profesional.
  */
 export const getDirectorDbFields = async (req, res) => {
   try {
@@ -671,12 +813,36 @@ export const getDirectorDbFields = async (req, res) => {
       });
     }
 
+    const pool = getPool();
+
+    const metaQuery = `
+      SELECT *
+      FROM (
+        ${getBaseDirectorAcademicoQuery()}
+      ) AS director_academico
+      WHERE 1 = 0
+      LIMIT 0
+    `;
+
+    const [rows, fieldsInfo] = await pool.query(metaQuery);
+
+    const fields = (fieldsInfo || []).map((f, index) => ({
+      name: f.name,
+      label: f.name,
+      type: 'mixed',
+      nullable: true,
+      isPrimaryKey: f.name === 'cod_diploma',
+      hasDefault: false,
+      defaultValue: null,
+      extra: null,
+      position: index + 1,
+    }));
+
     return res.json({
       success: true,
-      data: [],
-      count: 0,
-      message:
-        'Tabla de BD para directores aún no configurada. Define la tabla de BD y ajusta este endpoint.',
+      data: fields,
+      count: fields.length,
+      source: 'director_academico_base_query',
     });
   } catch (error) {
     console.error('Error al obtener campos de BD de directores:', error.message);

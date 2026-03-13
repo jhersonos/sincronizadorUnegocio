@@ -8,6 +8,7 @@ class DirectorDashboard {
         this.fields = [];
         this.dbFields = [];
         this.tableInfo = null;
+        this.syncRows = [];
         this.apiBaseUrl = '/api';
         this.init();
     }
@@ -40,16 +41,267 @@ class DirectorDashboard {
 
         const syncShowBtn = document.getElementById('director-sync-show-btn');
         if (syncShowBtn) {
-            syncShowBtn.addEventListener('click', () => {
-                this.showMessage('⚠️ La sincronización de directores se habilitará cuando definas la tabla de BD correspondiente.', 'warning');
-            });
+            syncShowBtn.addEventListener('click', () => this.prepareDirectorSyncTable());
         }
 
         const syncBackBtn = document.getElementById('director-sync-back-btn');
         if (syncBackBtn) {
-            syncBackBtn.addEventListener('click', () => {
-                this.showMappingView();
+            syncBackBtn.addEventListener('click', () => this.showMappingView());
+        }
+
+        const syncStartBtn = document.getElementById('director-sync-start-btn');
+        if (syncStartBtn) {
+            syncStartBtn.addEventListener('click', () => this.startDirectorSynchronization());
+        }
+    }
+
+    getDirectorMappings() {
+        const rows = document.querySelectorAll('#director-selectors-container .director-mapping-row');
+        const mappings = [];
+        rows.forEach((row) => {
+            const checkbox = row.querySelector('.field-checkbox');
+            const select = row.querySelector('.database-field-select');
+            const fieldId = row.dataset.fieldId;
+            if (checkbox && checkbox.checked && select && select.value) {
+                const hubdbField = this.fields.find((f) => f.id === fieldId);
+                const databaseFieldName = select.value;
+                const databaseField = this.dbFields.find((f) => f.name === databaseFieldName);
+                if (hubdbField && databaseField) {
+                    mappings.push({
+                        enabled: true,
+                        hubdbField: { id: hubdbField.id, name: hubdbField.name, label: hubdbField.label || hubdbField.name },
+                        databaseField: { name: databaseField.name },
+                    });
+                }
+            }
+        });
+        return mappings;
+    }
+
+    hasCodDiplomaMapping(mappings) {
+        return Array.isArray(mappings) && mappings.some(
+            (m) => m.hubdbField && (m.hubdbField.name === 'cod_diploma' || m.hubdbField.name === 'COD_DIPLOMA')
+        );
+    }
+
+    showDirectorSyncView() {
+        const mappingSection = document.getElementById('director-mapping-section');
+        const syncViewSection = document.getElementById('director-sync-view-section');
+        if (mappingSection) mappingSection.style.display = 'none';
+        if (syncViewSection) syncViewSection.style.display = '';
+    }
+
+    async prepareDirectorSyncTable() {
+        const syncContainer = document.getElementById('director-sync-table-container');
+        const syncCount = document.getElementById('director-sync-count');
+        const syncStartBtn = document.getElementById('director-sync-start-btn');
+
+        const mappings = this.getDirectorMappings();
+
+        if (!mappings || mappings.length === 0) {
+            this.showMessage('⚠️ Debes seleccionar al menos un campo mapeado antes de sincronizar.', 'warning');
+            return;
+        }
+        if (!this.hasCodDiplomaMapping(mappings)) {
+            this.showMessage('⚠️ El campo cod_diploma es obligatorio: asigna la columna HubDB "cod_diploma" a tu campo de BD (p. ej. cod_diploma) para poder sincronizar.', 'warning');
+            return;
+        }
+
+        this.showDirectorSyncView();
+
+        syncContainer.innerHTML = `
+            <div class="loading-state">
+                <div class="spinner"></div>
+                <p>Cargando registros de directores desde la base de datos...</p>
+            </div>
+        `;
+        syncCount.textContent = '';
+        if (syncStartBtn) syncStartBtn.disabled = true;
+
+        try {
+            const response = await fetch(`${this.apiBaseUrl}/db/director/sync-data`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mappings }),
             });
+
+            const result = await response.json();
+
+            if (result.success) {
+                this.syncRows = result.data || [];
+                this.renderDirectorSyncTable(this.syncRows, mappings);
+                syncCount.textContent = `${result.count} registros`;
+
+                if (syncStartBtn) syncStartBtn.disabled = this.syncRows.length === 0;
+
+                if (this.syncRows.length === 0) {
+                    this.showMessage('⚠️ No se encontraron registros de directores en la base de datos.', 'warning');
+                } else {
+                    this.showMessage(`✅ Se cargaron ${result.count} registros de directores para sincronización.`, 'success');
+                }
+            } else {
+                syncContainer.innerHTML = `<div class="preview-error"><p>❌ Error: ${result.error || 'Error desconocido al cargar registros'}</p></div>`;
+                syncCount.textContent = 'Error';
+                this.showMessage(`❌ Error al cargar registros: ${result.error}`, 'error');
+            }
+        } catch (error) {
+            console.error('Error al preparar tabla de sincronización de directores:', error);
+            syncContainer.innerHTML = `<div class="preview-error"><p>❌ Error de conexión al cargar los registros</p></div>`;
+            syncCount.textContent = 'Error';
+            this.showMessage('❌ Error de conexión al cargar los registros de directores', 'error');
+        }
+    }
+
+    renderDirectorSyncTable(rows, mappings) {
+        const container = document.getElementById('director-sync-table-container');
+
+        if (!rows || rows.length === 0) {
+            container.innerHTML = '<div class="preview-empty"><p>No hay registros para mostrar.</p></div>';
+            return;
+        }
+
+        const columns = mappings.map((m) => ({
+            header: m.hubdbField.label || m.hubdbField.name,
+            dbField: m.databaseField.name,
+        }));
+
+        let html = `
+            <div class="preview-table-container">
+                <table class="preview-table sync-table">
+                    <thead>
+                        <tr>
+                            <th><input type="checkbox" id="director-sync-select-all" title="Seleccionar todos"></th>
+                            ${columns.map((col) => `<th>${col.header}</th>`).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+
+        rows.forEach((row, index) => {
+            const codDiploma = row.cod_diploma ?? row.COD_DIPLOMA ?? row.codDiploma ?? '';
+            html += `
+                <tr class="sync-row director-sync-row" data-index="${index}" data-cod-diploma="${codDiploma}">
+                    <td><input type="checkbox" class="sync-row-checkbox" checked></td>
+            `;
+            columns.forEach((col) => {
+                const value = row[col.dbField];
+                const displayValue = value === null || value === undefined
+                    ? '<em class="null-value">NULL</em>'
+                    : String(value).length > 80
+                        ? String(value).substring(0, 80) + '...'
+                        : String(value);
+                html += `<td>${displayValue}</td>`;
+            });
+            html += '</tr>';
+        });
+
+        html += '</tbody></table></div>';
+        container.innerHTML = html;
+
+        const selectAll = document.getElementById('director-sync-select-all');
+        if (selectAll) {
+            selectAll.addEventListener('change', (e) => {
+                container.querySelectorAll('.sync-row-checkbox').forEach((cb) => {
+                    cb.checked = e.target.checked;
+                });
+            });
+        }
+
+        const searchInput = document.getElementById('director-sync-search');
+        if (searchInput) {
+            searchInput.addEventListener('input', () => {
+                const q = (searchInput.value || '').toLowerCase().trim();
+                container.querySelectorAll('.director-sync-row').forEach((row) => {
+                    const text = (row.textContent || '').toLowerCase();
+                    row.style.display = !q || text.includes(q) ? '' : 'none';
+                });
+            });
+        }
+    }
+
+    async startDirectorSynchronization() {
+        const rowsElements = document.querySelectorAll('#director-sync-table-container .director-sync-row');
+        const mappings = this.getDirectorMappings();
+
+        if (!rowsElements || rowsElements.length === 0) {
+            this.showMessage('⚠️ No hay registros cargados para sincronizar.', 'warning');
+            return;
+        }
+        if (!mappings || mappings.length === 0) {
+            this.showMessage('⚠️ Debes tener mapeos activos para poder sincronizar.', 'warning');
+            return;
+        }
+        if (!this.hasCodDiplomaMapping(mappings)) {
+            this.showMessage('⚠️ El campo cod_diploma es obligatorio para sincronizar.', 'warning');
+            return;
+        }
+
+        const selectedCodDiploma = [];
+        rowsElements.forEach((rowEl) => {
+            const checkbox = rowEl.querySelector('.sync-row-checkbox');
+            if (checkbox && checkbox.checked) {
+                const cod = rowEl.dataset.codDiploma;
+                if (cod !== undefined && cod !== null && cod !== '') {
+                    selectedCodDiploma.push(cod);
+                }
+            }
+        });
+
+        if (selectedCodDiploma.length === 0) {
+            this.showMessage('⚠️ Debes seleccionar al menos un registro para sincronizar.', 'warning');
+            return;
+        }
+
+        const syncStartBtn = document.getElementById('director-sync-start-btn');
+        this.setSyncButtonLoading(syncStartBtn, true);
+
+        try {
+            const response = await fetch(`${this.apiBaseUrl}/hubdb/director/sync`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    mappings,
+                    codDiplomaList: selectedCodDiploma,
+                }),
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                const updated = result.updatedCount || 0;
+                const created = result.createdCount || 0;
+                const notFound = result.notFoundCount || 0;
+                const published = result.published === true;
+                const parts = [];
+                if (updated) parts.push(`actualizados: ${updated}`);
+                if (created) parts.push(`creados: ${created}`);
+                if (notFound) parts.push(`sin coincidencia en BD: ${notFound}`);
+                let msg = parts.length ? parts.join(', ') + '.' : 'Sin cambios.';
+                if (published) msg += ' Tabla publicada (draft → live).';
+                else if (updated || created) msg += ' Tabla no se pudo publicar; revisa en HubSpot.';
+                this.showMessage(`✅ Sincronización de directores completada. ${msg}`, 'success');
+            } else {
+                this.showMessage(`❌ Error en la sincronización: ${result.error || 'Error desconocido'}`, 'error');
+            }
+        } catch (error) {
+            console.error('Error al sincronizar directores:', error);
+            this.showMessage('❌ Error de conexión durante la sincronización con HubDB', 'error');
+        } finally {
+            this.setSyncButtonLoading(document.getElementById('director-sync-start-btn'), false);
+        }
+    }
+
+    setSyncButtonLoading(btn, loading) {
+        if (!btn) return;
+        if (loading) {
+            btn.disabled = true;
+            btn.dataset.originalText = btn.innerHTML;
+            btn.classList.add('btn-loading');
+            btn.innerHTML = '<span class="btn-spinner"></span> Sincronizando...';
+        } else {
+            btn.disabled = false;
+            btn.classList.remove('btn-loading');
+            btn.innerHTML = btn.dataset.originalText || 'Iniciar sincronización';
         }
     }
 
@@ -343,6 +595,12 @@ class DirectorDashboard {
         }).length;
         const statusEl = document.getElementById('director-mapping-status');
         if (statusEl) statusEl.textContent = `${assigned} de ${total} campos asignados`;
+
+        const mappings = this.getDirectorMappings();
+        const syncShowBtn = document.getElementById('director-sync-show-btn');
+        if (syncShowBtn) {
+            syncShowBtn.disabled = !(mappings.length > 0 && this.hasCodDiplomaMapping(mappings));
+        }
     }
 
     setupSearchListeners() {

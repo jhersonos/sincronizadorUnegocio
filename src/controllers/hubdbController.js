@@ -3,7 +3,7 @@ import { hubdbConfig } from '../config/hubdb.js';
 import { getHubDBRowsData } from '../services/hubdbRows.js';
 import mysql from 'mysql2/promise';
 import { databaseConfig } from '../config/database.js';
-import { getBaseProgramaQuery } from './databaseController.js';
+import { getBaseProgramaQuery, getBaseDirectorAcademicoQuery } from './databaseController.js';
 
 // Pool de conexión para MySQL (reutilizable)
 let pool;
@@ -914,6 +914,270 @@ export const getHubDBDirectorRows = async (req, res) => {
     res.status(500).json({
       success: false,
       error: error.message || 'Error interno del servidor',
+    });
+  }
+};
+
+/**
+ * Sincroniza la tabla HubDB de directores/académicos (data_academico).
+ * Usa cod_diploma como clave. Replica la lógica de read_directorAcademico del PHP.
+ */
+export const syncDirectorToHubDB = async (req, res) => {
+  try {
+    try {
+      hubdbConfig.validate();
+    } catch (validationError) {
+      return res.status(400).json({
+        success: false,
+        error: validationError.message,
+      });
+    }
+
+    try {
+      databaseConfig.validate();
+    } catch (validationError) {
+      return res.status(400).json({
+        success: false,
+        error: validationError.message,
+      });
+    }
+
+    const { mappings, codDiplomaList } = req.body;
+
+    if (!mappings || !Array.isArray(mappings) || mappings.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No se recibieron mapeos para sincronizar',
+      });
+    }
+
+    if (
+      !codDiplomaList ||
+      !Array.isArray(codDiplomaList) ||
+      codDiplomaList.length === 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        error: 'No se recibió ninguna lista de códigos de diploma para sincronizar',
+      });
+    }
+
+    const activeMappings = mappings.filter(
+      (m) => m.enabled && m.hubdbField && m.databaseField
+    );
+
+    if (activeMappings.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No hay mapeos activos para sincronizar',
+      });
+    }
+
+    const tableId = getDirectorTableId();
+    const pool = getPool();
+
+    const dbColumnsSet = new Set(
+      activeMappings.map((m) => m.databaseField.name)
+    );
+    dbColumnsSet.add('cod_diploma');
+    dbColumnsSet.add('nombre_academico');
+
+    const dbColumns = Array.from(dbColumnsSet).map((col) => `\`${col}\``);
+    const placeholders = codDiplomaList.map(() => '?').join(', ');
+
+    const query = `
+      SELECT ${dbColumns.join(', ')}
+      FROM (
+        ${getBaseDirectorAcademicoQuery()}
+      ) AS director_academico
+      WHERE cod_diploma IN (${placeholders})
+    `;
+
+    const [dbRows] = await pool.query(query, codDiplomaList);
+
+    const dbByCodDiploma = {};
+    dbRows.forEach((row) => {
+      const key = row.cod_diploma ?? String(row.cod_diploma || '');
+      if (key !== undefined && key !== null && key !== '') {
+        dbByCodDiploma[String(key)] = row;
+      }
+    });
+
+    const hubdbUrl = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${tableId}/rows/draft`;
+    const hubdbResponse = await axios.get(hubdbUrl, {
+      headers: hubdbConfig.getHeaders(),
+      params: { limit: 10000 },
+    });
+
+    const hubdbRows = hubdbResponse.data.results || [];
+    const hubdbByCodDiploma = {};
+    const hubdbByPath = {};
+
+    hubdbRows.forEach((row) => {
+      const values = row.values || {};
+      const codDiploma = values.cod_diploma ?? values.COD_DIPLOMA ?? values.codDiploma;
+      if (codDiploma !== undefined && codDiploma !== null && codDiploma !== '') {
+        hubdbByCodDiploma[String(codDiploma)] = row;
+      }
+      const p = row.path;
+      if (p !== undefined && p !== null && String(p).trim() !== '') {
+        hubdbByPath[String(p).trim()] = row;
+      }
+    });
+
+    let updatedCount = 0;
+    let createdCount = 0;
+    let notFoundCount = 0;
+    const errors = [];
+
+    const slugPath = (cod) => `academico-${String(cod).replace(/\./g, '-')}`;
+
+    for (const codDiploma of codDiplomaList) {
+      const dbRow = dbByCodDiploma[String(codDiploma)];
+
+      if (!dbRow) {
+        notFoundCount += 1;
+        continue;
+      }
+
+      const valuesToUpdate = {};
+      activeMappings.forEach((m) => {
+        const hubdbFieldName = m.hubdbField.name;
+        const dbFieldName = m.databaseField.name;
+        valuesToUpdate[hubdbFieldName] = dbRow[dbFieldName];
+      });
+
+      valuesToUpdate.cod_diploma = codDiploma;
+
+      const path = slugPath(codDiploma);
+      const name = dbRow.nombre_academico || String(codDiploma);
+
+      const hubdbRow = hubdbByCodDiploma[String(codDiploma)];
+
+      const reportError = (err, action) => {
+        console.error(`Error al ${action} fila HubDB director para cod_diploma=${codDiploma}:`, err.message);
+        if (err.response) {
+          console.error('Estado HubSpot:', err.response.status);
+          console.error('Respuesta HubSpot:', JSON.stringify(err.response.data, null, 2));
+        }
+        errors.push({
+          codDiploma,
+          message: err.message,
+          status: err.response?.status,
+          hubspot: err.response?.data,
+        });
+      };
+
+      if (hubdbRow) {
+        try {
+          const updateUrl = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${tableId}/rows/${hubdbRow.id}/draft`;
+          const payload = {
+            childTableId: hubdbRow.childTableId ?? 0,
+            displayIndex: hubdbRow.displayIndex ?? 0,
+            name,
+            path: hubdbRow.path || path,
+            values: valuesToUpdate,
+          };
+          await axios.patch(updateUrl, payload, { headers: hubdbConfig.getHeaders() });
+          updatedCount += 1;
+        } catch (err) {
+          reportError(err, 'actualizar');
+        }
+      } else {
+        const existingByPath = hubdbByPath[path];
+
+        if (existingByPath) {
+          try {
+            const updateUrl = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${tableId}/rows/${existingByPath.id}/draft`;
+            const payload = {
+              childTableId: existingByPath.childTableId ?? 0,
+              displayIndex: existingByPath.displayIndex ?? 0,
+              name,
+              path,
+              values: valuesToUpdate,
+            };
+            await axios.patch(updateUrl, payload, { headers: hubdbConfig.getHeaders() });
+            updatedCount += 1;
+          } catch (err) {
+            reportError(err, 'actualizar por path');
+          }
+        } else {
+          try {
+            const createUrl = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${tableId}/rows`;
+            const payload = {
+              path,
+              name,
+              childTableId: 0,
+              displayIndex: 0,
+              values: valuesToUpdate,
+            };
+            await axios.post(createUrl, payload, { headers: hubdbConfig.getHeaders() });
+            createdCount += 1;
+          } catch (err) {
+            const is409Path =
+              err.response?.status === 409 &&
+              err.response?.data?.subCategory === 'TableRowValidationError.DUPLICATE_PATH';
+            const rowId = err.response?.data?.context?.row_id?.[0];
+
+            if (is409Path && rowId) {
+              try {
+                const rowIdStr = String(rowId);
+                const existingRow = hubdbRows.find((r) => String(r.id) === rowIdStr);
+                const updateUrl = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${tableId}/rows/${rowIdStr}/draft`;
+                const patchPayload = {
+                  childTableId: existingRow?.childTableId ?? 0,
+                  displayIndex: existingRow?.displayIndex ?? 0,
+                  name,
+                  path: existingRow?.path || path,
+                  values: valuesToUpdate,
+                };
+                await axios.patch(updateUrl, patchPayload, { headers: hubdbConfig.getHeaders() });
+                updatedCount += 1;
+              } catch (patchErr) {
+                reportError(patchErr, 'actualizar tras 409');
+              }
+            } else {
+              reportError(err, 'crear');
+            }
+          }
+        }
+      }
+    }
+
+    let published = false;
+    if (updatedCount > 0 || createdCount > 0) {
+      try {
+        const publishUrl = `${hubdbConfig.baseUrl}/cms/v3/hubdb/tables/${tableId}/draft/publish`;
+        await axios.post(publishUrl, {}, { headers: hubdbConfig.getHeaders() });
+        published = true;
+      } catch (publishErr) {
+        console.error('Error al publicar tabla HubDB directores:', publishErr.message);
+        errors.push({
+          codDiploma: null,
+          message: `Publicación de tabla: ${publishErr.message}`,
+          status: publishErr.response?.status,
+          hubspot: publishErr.response?.data,
+        });
+      }
+    }
+
+    return res.json({
+      success: true,
+      updatedCount,
+      createdCount,
+      notFoundCount,
+      published,
+      errors,
+      totalRequested: codDiplomaList.length,
+    });
+  } catch (error) {
+    console.error('Error general en sincronización de directores a HubDB:', error.message);
+
+    return res.status(500).json({
+      success: false,
+      error:
+        error.message ||
+        'Error interno durante la sincronización de directores con HubDB',
     });
   }
 };
